@@ -1,32 +1,27 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
+import { OrbitControls, useTexture } from "@react-three/drei";
 import * as THREE from "three";
-import type { HeightmapResponse, Palette } from "@/types";
-import { PALETTES } from "@/types";
 import { usePosterStore } from "@/stores/posterStore";
 import { useGlobeData } from "@/hooks/useGlobeData";
+import { TerrainSpikes } from "@/components/Globe/terrain";
+import {
+  atmosphereVertexShader,
+  atmosphereFragmentShader,
+  innerGlowFragmentShader,
+} from "@/components/Globe/shaders";
 
 const SPHERE_RADIUS = 5;
-const MAX_INSTANCES = 500_000;
 
-function lerp(a: number, b: number, t: number) {
-  return a + (b - a) * t;
-}
+// --- Texture URLs (NASA Blue Marble via three-globe CDN) ---
+const EARTH_DAY_MAP =
+  "https://unpkg.com/three-globe@2.41.12/example/img/earth-blue-marble.jpg";
+const EARTH_BUMP_MAP =
+  "https://unpkg.com/three-globe@2.41.12/example/img/earth-topology.png";
+const NIGHT_SKY_MAP =
+  "https://unpkg.com/three-globe@2.41.12/example/img/night-sky.png";
 
-function lerpColor(colors: string[], t: number): THREE.Color {
-  const clamped = Math.max(0, Math.min(1, t));
-  const segment = clamped * (colors.length - 1);
-  const idx = Math.floor(segment);
-  const frac = segment - idx;
-  const c1 = new THREE.Color(colors[Math.min(idx, colors.length - 1)]);
-  const c2 = new THREE.Color(colors[Math.min(idx + 1, colors.length - 1)]);
-  return new THREE.Color(
-    lerp(c1.r, c2.r, frac),
-    lerp(c1.g, c2.g, frac),
-    lerp(c1.b, c2.b, frac),
-  );
-}
+// --- Utility ---
 
 function latLonToCartesian(
   lat: number,
@@ -41,45 +36,11 @@ function latLonToCartesian(
   return [x, y, z];
 }
 
-// --- Atmosphere glow with gradient falloff ---
-
-const atmosphereVertexShader = `
-  varying vec3 vNormal;
-  varying vec3 vPosition;
-  void main() {
-    vNormal = normalize(normalMatrix * normal);
-    vPosition = (modelViewMatrix * vec4(position, 1.0)).xyz;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`;
-
-// Gradient glow: warm near the surface, fading to transparent
-const atmosphereFragmentShader = `
-  varying vec3 vNormal;
-  varying vec3 vPosition;
-  void main() {
-    vec3 viewDir = normalize(-vPosition);
-    float rim = 1.0 - max(dot(viewDir, vNormal), 0.0);
-
-    // Soft gradient: multiple falloff layers blended
-    float innerGlow = pow(rim, 6.0) * 0.6;   // tight bright edge
-    float midGlow = pow(rim, 3.0) * 0.2;      // mid spread
-    float outerGlow = pow(rim, 1.5) * 0.06;   // wide soft haze
-
-    float glow = innerGlow + midGlow + outerGlow;
-
-    // Warm color gradient: golden near edge → soft amber → transparent
-    vec3 warmInner = vec3(1.0, 0.85, 0.5);    // golden
-    vec3 warmOuter = vec3(0.9, 0.65, 0.3);    // amber
-    vec3 color = mix(warmOuter, warmInner, pow(rim, 2.0));
-
-    gl_FragColor = vec4(color, glow);
-  }
-`;
+// --- Atmosphere glow (blue-white, Google Earth style) ---
 
 function Atmosphere() {
   return (
-    <mesh scale={[1.25, 1.25, 1.25]}>
+    <mesh scale={[1.12, 1.12, 1.12]}>
       <sphereGeometry args={[SPHERE_RADIUS, 64, 64]} />
       <shaderMaterial
         vertexShader={atmosphereVertexShader}
@@ -94,18 +55,6 @@ function Atmosphere() {
 }
 
 // --- Subtle inner rim light on the globe surface ---
-
-const innerGlowFragmentShader = `
-  varying vec3 vNormal;
-  varying vec3 vPosition;
-  void main() {
-    vec3 viewDir = normalize(-vPosition);
-    float rim = 1.0 - max(dot(viewDir, vNormal), 0.0);
-    float glow = pow(rim, 4.0) * 0.25;
-    vec3 color = vec3(1.0, 0.9, 0.6); // warm soft gold
-    gl_FragColor = vec4(color, glow);
-  }
-`;
 
 function InnerGlow() {
   return (
@@ -123,44 +72,21 @@ function InnerGlow() {
   );
 }
 
-// --- Static stars (no animation, no flickering) ---
+// --- Space background (night sky panorama on large inverted sphere) ---
 
-function StaticStars() {
-  const geometry = useMemo(() => {
-    const count = 4000;
-    const positions = new Float32Array(count * 3);
-    const sizes = new Float32Array(count);
+function SpaceBackground() {
+  const texture = useTexture(NIGHT_SKY_MAP);
 
-    for (let i = 0; i < count; i++) {
-      // Distribute on a large sphere
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-      const r = 200 + Math.random() * 300;
-
-      positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-      positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-      positions[i * 3 + 2] = r * Math.cos(phi);
-
-      sizes[i] = 0.5 + Math.random() * 1.5;
-    }
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute("size", new THREE.BufferAttribute(sizes, 1));
-    return geo;
-  }, []);
+  useEffect(() => {
+    texture.mapping = THREE.EquirectangularReflectionMapping;
+    texture.colorSpace = THREE.SRGBColorSpace;
+  }, [texture]);
 
   return (
-    <points geometry={geometry}>
-      <pointsMaterial
-        color="#ffffff"
-        size={1.2}
-        sizeAttenuation
-        transparent
-        opacity={0.7}
-        depthWrite={false}
-      />
-    </points>
+    <mesh>
+      <sphereGeometry args={[500, 64, 64]} />
+      <meshBasicMaterial map={texture} side={THREE.BackSide} depthWrite={false} />
+    </mesh>
   );
 }
 
@@ -200,9 +126,9 @@ function Graticule() {
       {lines.map((geo, i) => (
         <line key={i} geometry={geo}>
           <lineBasicMaterial
-            color="#d4a46a"
+            color="#aac4e0"
             transparent
-            opacity={0.06}
+            opacity={0.04}
             depthWrite={false}
           />
         </line>
@@ -211,86 +137,17 @@ function Graticule() {
   );
 }
 
-// --- Terrain spikes ---
-
-interface TerrainSpikesProps {
-  heightmap: HeightmapResponse;
-  palette: Palette;
-}
-
-function TerrainSpikes({ heightmap, palette }: TerrainSpikesProps) {
-  const meshRef = useRef<THREE.InstancedMesh>(null);
-  const colors = PALETTES[palette];
-
-  const { count, matrices, instanceColors } = useMemo(() => {
-    const { matrix, width, height, bounds, min_val, max_val } = heightmap;
-    const range = max_val - min_val || 1;
-    const dummy = new THREE.Object3D();
-    const tempMatrices: THREE.Matrix4[] = [];
-    const tempColors: THREE.Color[] = [];
-
-    for (let row = 0; row < height; row++) {
-      for (let col = 0; col < width; col++) {
-        if (tempMatrices.length >= MAX_INSTANCES) break;
-        const val = matrix[row][col];
-        if (val <= 0) continue;
-
-        const t = (val - min_val) / range;
-        const spikeHeight = t * 2;
-
-        const lat = lerp(bounds.north, bounds.south, row / (height - 1));
-        const lon = lerp(bounds.west, bounds.east, col / (width - 1));
-        const [x, y, z] = latLonToCartesian(lat, lon, SPHERE_RADIUS);
-
-        dummy.position.set(x, y, z);
-        dummy.lookAt(0, 0, 0);
-        dummy.rotateX(Math.PI / 2);
-        dummy.translateY(spikeHeight / 2);
-        dummy.scale.set(1, spikeHeight || 0.01, 1);
-        dummy.updateMatrix();
-
-        tempMatrices.push(dummy.matrix.clone());
-        tempColors.push(lerpColor(colors, t));
-      }
-      if (tempMatrices.length >= MAX_INSTANCES) break;
-    }
-
-    return {
-      count: tempMatrices.length,
-      matrices: tempMatrices,
-      instanceColors: tempColors,
-    };
-  }, [heightmap, colors]);
-
-  useEffect(() => {
-    const mesh = meshRef.current;
-    if (!mesh) return;
-    for (let i = 0; i < count; i++) {
-      mesh.setMatrixAt(i, matrices[i]);
-      mesh.setColorAt(i, instanceColors[i]);
-    }
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  }, [count, matrices, instanceColors]);
-
-  if (count === 0) return null;
-
-  return (
-    <instancedMesh
-      ref={meshRef}
-      args={[undefined, undefined, count]}
-      frustumCulled={false}
-    >
-      <boxGeometry args={[0.02, 1, 0.02]} />
-      <meshStandardMaterial vertexColors toneMapped={false} />
-    </instancedMesh>
-  );
-}
-
-// --- Earth sphere ---
+// --- Earth sphere with NASA Blue Marble textures ---
 
 function EarthSphere() {
   const meshRef = useRef<THREE.Mesh>(null);
+
+  const [dayMap, bumpMap] = useTexture([EARTH_DAY_MAP, EARTH_BUMP_MAP]);
+
+  useEffect(() => {
+    dayMap.colorSpace = THREE.SRGBColorSpace;
+    dayMap.anisotropy = 8;
+  }, [dayMap]);
 
   useFrame((_state, delta) => {
     if (meshRef.current) {
@@ -302,11 +159,11 @@ function EarthSphere() {
     <mesh ref={meshRef}>
       <sphereGeometry args={[SPHERE_RADIUS, 128, 128]} />
       <meshPhongMaterial
-        color="#0c1420"
-        emissive="#12192a"
-        emissiveIntensity={0.25}
-        specular="#3a3020"
-        shininess={8}
+        map={dayMap}
+        bumpMap={bumpMap}
+        bumpScale={0.04}
+        specular={new THREE.Color("#1a2a3a")}
+        shininess={15}
       />
     </mesh>
   );
@@ -320,17 +177,17 @@ function Scene() {
 
   return (
     <>
-      {/* Lighting — warm key light, cool fill */}
-      <ambientLight intensity={0.1} color="#2a2a3a" />
-      <directionalLight position={[10, 8, 5]} intensity={1.0} color="#fff5e0" />
+      {/* Lighting — Sun-like key light from one side, very dim ambient for dark side */}
+      <ambientLight intensity={0.08} color="#1a1a2e" />
+      <directionalLight position={[10, 5, 8]} intensity={1.4} color="#fff8f0" />
       <directionalLight
-        position={[-8, -4, -6]}
-        intensity={0.15}
-        color="#a08060"
+        position={[-6, -2, -8]}
+        intensity={0.06}
+        color="#4a6080"
       />
 
-      {/* Static stars — no flickering */}
-      <StaticStars />
+      {/* Deep space background with Milky Way texture */}
+      <SpaceBackground />
 
       {/* Globe layers */}
       <EarthSphere />
@@ -339,7 +196,13 @@ function Scene() {
       <Atmosphere />
 
       {/* Data */}
-      {heightmap && <TerrainSpikes heightmap={heightmap} palette={palette} />}
+      {heightmap && (
+        <TerrainSpikes
+          heightmap={heightmap}
+          palette={palette}
+          sphereRadius={SPHERE_RADIUS}
+        />
+      )}
 
       {/* Controls */}
       <OrbitControls

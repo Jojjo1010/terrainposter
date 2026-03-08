@@ -72,3 +72,11 @@ export const RESOLUTION_PX: Record<ExportResolution, number> = {
   "4k": 4096,
   "8k": 8192,
 };
+
+export interface GlobeDataPoint {
+  lat: number;
+  lon: number;
+  value: number;
+}
+
+export type ScaleMethod = "log" | "linear" | "sqrt";

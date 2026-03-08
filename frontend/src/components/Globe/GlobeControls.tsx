@@ -12,26 +12,21 @@ export default function GlobeControls() {
     : 0;
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Palette legend */}
-      <div className="rounded-lg bg-white/5 px-4 py-3 backdrop-blur-sm">
-        <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-white/40">
-          Color Palette
-        </label>
-        <div
-          className="h-3 w-full rounded-full"
-          style={{
-            background: `linear-gradient(to right, ${colors.join(", ")})`,
-          }}
-        />
-      </div>
+    <div className="flex w-[200px] flex-col gap-2 rounded-xl border border-white/10 bg-black/40 px-3.5 py-3 backdrop-blur-md">
+      {/* Palette gradient bar */}
+      <div
+        className="h-1.5 w-full rounded-full"
+        style={{
+          background: `linear-gradient(to right, ${colors.join(", ")})`,
+        }}
+      />
 
-      {/* Info */}
-      <div className="rounded-lg bg-white/5 px-4 py-2.5 text-xs text-white/40 backdrop-blur-sm">
+      {/* Data info */}
+      <p className="text-[10px] text-white/30">
         {isLoading
-          ? "Loading data..."
+          ? "Loading\u2026"
           : `${pointCount.toLocaleString()} data points`}
-      </div>
+      </p>
     </div>
   );
 }
