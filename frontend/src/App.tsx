@@ -13,9 +13,7 @@ export default function App() {
   const city = usePosterStore((s) => s.city);
 
   const handleGeneratePoster = () => {
-    if (city) {
-      setMode("poster");
-    }
+    if (city) setMode("poster");
   };
 
   const handleBackToGlobe = () => {
@@ -23,61 +21,68 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#0B0B0B]">
-      {/* Top bar */}
-      <header className="flex shrink-0 items-center gap-4 border-b border-white/10 px-6 py-3">
-        <h1
-          className="cursor-pointer text-lg font-bold tracking-wide text-white"
-          onClick={handleBackToGlobe}
-        >
-          TerrainPoster
-        </h1>
-        <DatasetPicker />
-        <CitySearch />
-        <div className="ml-auto">
-          {mode === "globe" && (
-            <button
-              onClick={handleGeneratePoster}
-              disabled={!city}
-              className="rounded-lg bg-purple-600 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Generate Poster
-            </button>
-          )}
-          {mode === "poster" && (
-            <button
-              onClick={handleBackToGlobe}
-              className="rounded-lg border border-white/20 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-white/10"
-            >
-              Back to Globe
-            </button>
-          )}
-        </div>
-      </header>
+    <div className="relative h-screen w-screen overflow-hidden bg-[#0B0B0B]">
+      {/* Globe fills entire viewport */}
+      <div className="absolute inset-0">
+        <Globe />
+      </div>
 
-      {/* Main area */}
-      <main className="relative flex min-h-0 flex-1">
-        {mode === "globe" ? (
-          <div className="relative h-full w-full">
-            <Globe />
-            <GlobeControls />
-          </div>
-        ) : (
-          <div className="flex h-full w-full">
-            {/* Left: style controls */}
-            <aside className="h-full w-80 shrink-0 overflow-y-auto border-r border-white/10 p-4">
+      {/* Left side panel — overlays on top of the globe */}
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex w-80 flex-col">
+        <div className="pointer-events-auto flex flex-col gap-4 overflow-y-auto p-5">
+          {/* Logo / title */}
+          <h1
+            className="cursor-pointer text-xl font-bold tracking-widest text-white/90"
+            onClick={handleBackToGlobe}
+          >
+            TERRAINPOSTER
+          </h1>
+
+          {/* Search */}
+          <CitySearch />
+
+          {/* Dataset picker */}
+          <DatasetPicker />
+
+          {/* Globe controls (palette, data info) */}
+          {mode === "globe" && <GlobeControls />}
+
+          {/* Poster controls */}
+          {mode === "poster" && (
+            <>
               <StyleControls />
-              <div className="mt-6">
-                <ExportButton />
-              </div>
-            </aside>
-            {/* Right: poster preview */}
-            <div className="flex flex-1 items-center justify-center p-8">
-              <PosterPreview />
-            </div>
+              <ExportButton />
+            </>
+          )}
+
+          {/* Mode toggle button */}
+          <div className="pt-2">
+            {mode === "globe" ? (
+              <button
+                onClick={handleGeneratePoster}
+                disabled={!city}
+                className="w-full rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                Generate Poster
+              </button>
+            ) : (
+              <button
+                onClick={handleBackToGlobe}
+                className="w-full rounded-lg border border-white/20 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-white/10"
+              >
+                Back to Globe
+              </button>
+            )}
           </div>
-        )}
-      </main>
+        </div>
+      </div>
+
+      {/* Poster preview — centered overlay when in poster mode */}
+      {mode === "poster" && (
+        <div className="pointer-events-auto absolute inset-y-0 left-80 right-0 z-10 flex items-center justify-center">
+          <PosterPreview />
+        </div>
+      )}
     </div>
   );
 }

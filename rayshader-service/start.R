@@ -1,0 +1,6 @@
+cat("Loading plumber...\n")
+library(plumber)
+cat("Plumbing API...\n")
+pr <- plumb("/app/plumber_api.R")
+cat("Starting server on port 8787...\n")
+pr$run(host = "0.0.0.0", port = 8787)
