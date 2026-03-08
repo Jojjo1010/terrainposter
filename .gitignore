@@ -1,0 +1,13 @@
+data/raw/
+data/processed/
+node_modules/
+__pycache__/
+*.pyc
+.env
+*.egg-info/
+dist/
+build/
+.vite/
+rayshader-service/output/*.png
+rayshader-service/output/*.tif
+.DS_Store
